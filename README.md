@@ -14,7 +14,7 @@ Here is a (yet another) port to Commodore.  This version intends to support at l
 
 Why would you use this?  Mostly for historic, nostalgic reasons.  Also it fits in 256 bytes.
 
-This project is built to compile the source with ACME and VICE tools.  Should be easy enough to adapt to other assemblers.  Its load address is $1400 (5120) so it can work with most of these systems unchanged.   Note the routines have different addresses than on the Apple-1 so when entering hex programs for it, be sure to adapt for the addresses.  See [wozmon.lst](wozmon.lst).
+This project is built to compile the source with ACME and VICE tools.  Should be easy enough to adapt to other assemblers.  Its load address is $1400 (5120) so it can work with most of these systems unchanged.   Note the routines have different addresses than on the Apple-1 so when entering hex programs for it, be sure to adapt for the addresses.  See [wozmon.lst](wozmon.lst).   Originally I [ported it to minimum 6502/6850 system](https://x.com/DaveRVW/status/1788049720470020570).
 
 Because it uses the Commodore KERNAL screen editor, you can cursor around the screen, edit, and press ENTER again on existing lines.
 

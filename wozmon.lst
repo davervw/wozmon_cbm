@@ -1,0 +1,196 @@
+
+; ******** Source: wozmon.asm
+     1                          ; wozmon.asm
+     2                          ;
+     3                          ; Originally from Apple-1 Operation Manual, Steve Wozniak, 1976
+     4                          ; Revised 2024 May 8 for Commodore 64/VIC/128 by David R. Van Wagner davevw.com
+     5                          ; * Using C64 KERNAL (instead of MC6520 and KBD/CRT)
+     6                          ; * extra processing for expected mark parity, software caps lock, and revised newline/carriage return processing
+     7                          ; * revised to expect terminal line edit mode instead of echo off character processing
+     8                          ; * revised to acme syntax
+     9                          ; * different zero page usage
+    10                          ; * changed l/h to wl/wh because vice didn't like that symbol
+    11                          ; * reverse toggle instead of spaces only on vic-20 (like HESMON) because too few columns
+    12                          
+    13                          ; zero page usage - tape stuff on vic-20, 64, 128.  Needs to change for PET, TED, Plus/4, 16, etc.
+    14                          xaml=$a3
+    15                          xamh=$a4
+    16                          stl=$a5
+    17                          sth=$a6
+    18                          wl=$a7
+    19                          wh=$a8
+    20                          ysav=$a9
+    21                          mode=$aa
+    22                          
+    23                          in=$200 ; same as Commodore uses, should be fine to copy from/to this, will probably use slightly less
+    24                          
+    25                          ;** C64 support added by David R. Van Wagner davevw.com ***************************************
+    26                          ; Commodore KENRAL
+    27                          CHROUT=$FFD2
+    28                          CHRIN=$FFCF
+    29                          ;** C64 support added by David R. Van Wagner davevw.com ***************************************
+    30                          
+    31                          * = $1400
+    32                          START:
+    33  1400 d8                 	cld
+    34  1401 58                 	cli
+    35  1402 4c1814             	jmp escape
+    36                          	
+    37                          ;** C64 support added by David R. Van Wagner davevw.com ***************************************
+    38                          KBD_IN:
+    39  1405 8422               	sty $22
+    40  1407 20cfff             	jsr CHRIN
+    41  140a a422               	ldy $22
+    42  140c 60                 	rts
+    43                          ;** C64 support added by David R. Van Wagner davevw.com ***************************************
+    44                          
+    45                          notcr:
+    46  140d c9df               	cmp #$DF ; underscore or Commodore back arrow (rub out?)
+    47  140f f013               	beq backspace
+    48  1411 c983               	cmp #$83
+    49  1413 f003               	beq escape
+    50  1415 c8                 	iny
+    51  1416 100f               	bpl nextchar
+    52                          escape:
+    53  1418 a9dc               	lda #$DC ; backslash
+    54  141a 20e714             	jsr echo
+    55                          getline:
+    56  141d a90d               	lda #13
+    57  141f 20e714             	jsr echo
+    58  1422 a001               	ldy #1
+    59                          backspace:
+    60  1424 88                 	dey
+    61  1425 30f6               	bmi getline
+    62                          nextchar:
+    63  1427 200514             	jsr KBD_IN
+    64  142a 0980               	ora #$80
+    65  142c 990002             	sta in, y
+    66                          	;jsr echo - needed only if terminal echo off, line editing off
+    67  142f c98d               	cmp #$8D
+    68  1431 d0da               	bne notcr
+    69  1433 a0ff               	ldy #$ff
+    70  1435 a900               	lda #$00
+    71  1437 aa                 	tax
+    72                          setstor:
+    73  1438 0a                 	asl
+    74                          setmode:
+    75  1439 85aa               	sta mode
+    76                          blskip:
+    77  143b c8                 	iny
+    78                          nextitem:
+    79  143c b90002             	lda in, y
+    80  143f c98d               	cmp #$8D
+    81  1441 f0da               	beq getline
+    82  1443 c9ae               	cmp #$AE ; period
+    83  1445 90f4               	bcc blskip
+    84  1447 f0f0               	beq setmode
+    85  1449 c9ba               	cmp #$BA ; colon
+    86  144b f0eb               	beq setstor
+    87  144d c9d2               	cmp #$D2 ; R
+    88  144f f03b               	beq run
+    89  1451 86a7               	stx wl
+    90  1453 86a8               	stx wh
+    91  1455 84a9               	sty ysav
+    92                          nexthex:
+    93  1457 b90002             	lda in, y
+    94  145a 49b0               	eor #$B0
+    95  145c c90a               	cmp #$0A
+    96  145e 9006               	bcc dig
+    97  1460 6988               	adc #$88
+    98  1462 c9fa               	cmp #$FA
+    99  1464 9011               	bcc nothex
+   100                          dig:
+   101  1466 0a                 	asl
+   102  1467 0a                 	asl
+   103  1468 0a                 	asl
+   104  1469 0a                 	asl
+   105  146a a204               	ldx #4
+   106                          hexshift:
+   107  146c 0a                 	asl
+   108  146d 26a7               	rol wl
+   109  146f 26a8               	rol wh
+   110  1471 ca                 	dex
+   111  1472 d0f8               	bne hexshift
+   112  1474 c8                 	iny
+   113  1475 d0e0               	bne nexthex
+   114                          nothex:
+   115  1477 c4a9               	cpy ysav
+   116  1479 f09d               	beq escape
+   117  147b 24aa               	bit mode
+   118  147d 5010               	bvc notstor
+   119  147f a5a7               	lda wl
+   120  1481 81a5               	sta (stl, x)
+   121  1483 e6a5               	inc stl
+   122  1485 d0b5               	bne nextitem
+   123  1487 e6a6               	inc sth
+   124                          tonextitem:
+   125  1489 4c3c14             	jmp nextitem
+   126                          run:
+   127  148c 6ca300             	jmp (xaml)
+   128                          notstor:
+   129  148f 302b               	bmi xamnext
+   130  1491 a202               	ldx #2
+   131                          setadr:
+   132  1493 b5a6               	lda wl-1,x
+   133  1495 95a4               	sta stl-1,x
+   134  1497 95a2               	sta xaml-1,x
+   135  1499 ca                 	dex
+   136  149a d0f7               	bne setadr
+   137                          nxtprnt:
+   138  149c d014               	bne prdata
+   139  149e a90d               	lda #13
+   140  14a0 20e714             	jsr echo
+   141  14a3 a5a4               	lda xamh
+   142  14a5 20d414             	jsr prbyte
+   143  14a8 a5a3               	lda xaml
+   144  14aa 20d414             	jsr prbyte
+   145  14ad a9ba               	lda #$BA ; colon
+   146  14af 20e714             	jsr echo
+   147                          prdata:
+   148  14b2 a920               	lda #32
+   149  14b4 20e714             	jsr echo
+   150  14b7 a1a3               	lda (xaml,x)
+   151  14b9 20d414             	jsr prbyte
+   152                          xamnext:
+   153  14bc 86aa               	stx mode
+   154  14be a5a3               	lda xaml
+   155  14c0 c5a7               	cmp wl
+   156  14c2 a5a4               	lda xamh
+   157  14c4 e5a8               	sbc wh
+   158  14c6 b0c1               	bcs tonextitem
+   159  14c8 e6a3               	inc xaml
+   160  14ca d002               	bne mod8chk
+   161  14cc e6a4               	inc xamh
+   162                          mod8chk:
+   163  14ce a5a3               	lda xaml
+   164  14d0 2907               	and #7
+   165  14d2 10c8               	bpl nxtprnt ; should always branch
+   166                          prbyte:
+   167  14d4 48                 	pha
+   168  14d5 4a                 	lsr
+   169  14d6 4a                 	lsr
+   170  14d7 4a                 	lsr
+   171  14d8 4a                 	lsr
+   172  14d9 20dd14             	jsr prhex
+   173  14dc 68                 	pla
+   174                          prhex:
+   175  14dd 290f               	and #$0F
+   176  14df 09b0               	ora #$B0
+   177  14e1 c9ba               	cmp #$BA
+   178  14e3 9002               	bcc echo
+   179  14e5 6906               	adc #6
+   180                          echo:
+   181  14e7 297f               	and #$7f ; strip mark bit
+   182  14e9 c920               	cmp #32	; space?
+   183  14eb d010               	bne notspace
+   184  14ed ad80ff             	lda $FF80 ; Commodore ROM version
+   185  14f0 c916               	cmp #$16  ; VIC?
+   186  14f2 d007               	bne notvic
+   187  14f4 a5c7               	lda 199
+   188  14f6 4912               	eor #18	; invert reverse state
+   189  14f8 85c7               	sta 199
+   190  14fa 60                 	rts
+   191                          notvic:
+   192  14fb a920                   lda #32
+   193                          notspace:
+   194  14fd 4cd2ff             	jmp CHROUT

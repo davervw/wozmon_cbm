@@ -22,11 +22,11 @@ mode=$aa
 
 in=$200 ; same as Commodore uses, should be fine to copy from/to this, will probably use slightly less
 
-;** C64 support added by David R. Van Wagner davevw.com ***************************************
+;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************
 ; Commodore KENRAL
 CHROUT=$FFD2
 CHRIN=$FFCF
-;** C64 support added by David R. Van Wagner davevw.com ***************************************
+;** C64 etc. support added by David R. Van Wagner davevw.com ***************************************
 
 * = $1400
 START:
@@ -34,13 +34,13 @@ START:
 	cli
 	jmp escape
 	
-;** C64 support added by David R. Van Wagner davevw.com ***************************************
+;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************
 KBD_IN:
 	sty $22
-	jsr CHRIN
+	jsr CHRIN ; note: full screen editor
 	ldy $22
 	rts
-;** C64 support added by David R. Van Wagner davevw.com ***************************************
+;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************
 
 notcr:
 	cmp #$DF ; underscore or Commodore back arrow (rub out?)
@@ -178,6 +178,7 @@ prhex:
 	bcc echo
 	adc #6
 echo:
+;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************
 	and #$7f ; strip mark bit
 	cmp #32	; space?
 	bne notspace
@@ -192,3 +193,4 @@ notvic:
     lda #32
 notspace:
 	jmp CHROUT
+;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************

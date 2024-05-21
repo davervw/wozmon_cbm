@@ -4,13 +4,9 @@ WozMon is the default monitor for Apple 1 ROMs as documented in the Apple-1 Oper
 
 Written by Steve Wozniak for the Apple 1 release
 
-Here is a (yet another) port to Commodore.  This version intends to support at least three of the common models
+Here is a (yet another) port to Commodore.  This branch targets $CF00-$CFFF so may only work on:
 
 * Commodore 64
-* Vic-20
-* Commodore 128
-
-(I've loaded and run it on TED Plus/4 system, but the zero page usage overlaps the clock, so something needs to change, same for PET 2001)
 
 Why would you use this?  Mostly for historic, nostalgic reasons.  Also it fits in 256 bytes.
 
@@ -22,7 +18,7 @@ Usage:
 
 ````
 LOAD "0:*",8,1
-SYS 5120
+SYS 52992
 ````
 
 ![wozmon64.png](wozmon64.png)

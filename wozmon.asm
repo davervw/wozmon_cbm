@@ -28,7 +28,7 @@ CHROUT=$FFD2
 CHRIN=$FFCF
 ;** C64 etc. support added by David R. Van Wagner davevw.com ***************************************
 
-* = $1400
+* = $cf00
 START:
 	cld
 	cli

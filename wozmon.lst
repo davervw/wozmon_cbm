@@ -24,11 +24,11 @@
     22                          
     23                          in=$200 ; same as Commodore uses, should be fine to copy from/to this, will probably use slightly less
     24                          
-    25                          ;** C64 support added by David R. Van Wagner davevw.com ***************************************
+    25                          ;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************
     26                          ; Commodore KENRAL
     27                          CHROUT=$FFD2
     28                          CHRIN=$FFCF
-    29                          ;** C64 support added by David R. Van Wagner davevw.com ***************************************
+    29                          ;** C64 etc. support added by David R. Van Wagner davevw.com ***************************************
     30                          
     31                          * = $1400
     32                          START:
@@ -36,13 +36,13 @@
     34  1401 58                 	cli
     35  1402 4c1814             	jmp escape
     36                          	
-    37                          ;** C64 support added by David R. Van Wagner davevw.com ***************************************
+    37                          ;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************
     38                          KBD_IN:
     39  1405 8422               	sty $22
-    40  1407 20cfff             	jsr CHRIN
+    40  1407 20cfff             	jsr CHRIN ; note: full screen editor
     41  140a a422               	ldy $22
     42  140c 60                 	rts
-    43                          ;** C64 support added by David R. Van Wagner davevw.com ***************************************
+    43                          ;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************
     44                          
     45                          notcr:
     46  140d c9df               	cmp #$DF ; underscore or Commodore back arrow (rub out?)
@@ -180,17 +180,19 @@
    178  14e3 9002               	bcc echo
    179  14e5 6906               	adc #6
    180                          echo:
-   181  14e7 297f               	and #$7f ; strip mark bit
-   182  14e9 c920               	cmp #32	; space?
-   183  14eb d010               	bne notspace
-   184  14ed ad80ff             	lda $FF80 ; Commodore ROM version
-   185  14f0 c916               	cmp #$16  ; VIC?
-   186  14f2 d007               	bne notvic
-   187  14f4 a5c7               	lda 199
-   188  14f6 4912               	eor #18	; invert reverse state
-   189  14f8 85c7               	sta 199
-   190  14fa 60                 	rts
-   191                          notvic:
-   192  14fb a920                   lda #32
-   193                          notspace:
-   194  14fd 4cd2ff             	jmp CHROUT
+   181                          ;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************
+   182  14e7 297f               	and #$7f ; strip mark bit
+   183  14e9 c920               	cmp #32	; space?
+   184  14eb d010               	bne notspace
+   185  14ed ad80ff             	lda $FF80 ; Commodore ROM version
+   186  14f0 c916               	cmp #$16  ; VIC?
+   187  14f2 d007               	bne notvic
+   188  14f4 a5c7               	lda 199
+   189  14f6 4912               	eor #18	; invert reverse state
+   190  14f8 85c7               	sta 199
+   191  14fa 60                 	rts
+   192                          notvic:
+   193  14fb a920                   lda #32
+   194                          notspace:
+   195  14fd 4cd2ff             	jmp CHROUT
+   196                          ;** C64, etc. support added by David R. Van Wagner davevw.com ***************************************

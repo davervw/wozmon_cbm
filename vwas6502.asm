@@ -4,6 +4,7 @@
 ;;
 ;; INSTRUCTIONS
 ;;   LOAD"WOZMON SYS5120",8,1
+;;   LOAD"VWAS6502",8,1
 ;;   SYS 5120
 ;;   1500 R 1500
 ;;

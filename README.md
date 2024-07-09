@@ -20,10 +20,21 @@ Because it uses the Commodore KERNAL screen editor, you can cursor around the sc
 
 Usage:
 
-````
-LOAD "0:*",8,1
-SYS 5120
-````
+``LOAD "WOZMON*",8,1``
+
+``LOAD "VWAS6502",8,1`` (optional to load the new disassembler)
+
+``SYS 5120``
+
+wozmon shows a backslash prompt on the Apple 1.  On Commodore it is £.
+
+Example statements:
+
+* ``01FF`` to display single memory byte
+* ``FF00.FF7F`` to display memory range
+* ``1000: 01 02 03 04`` to enter bytes into memory
+* ``1000 R`` to JMP to machine code at address
+* ``1500 R 1400`` to start disassembly of wozmon (1400 is address to list 20 statements) *** requires vwasm6502 loaded at $1500 ***
 
 ![wozmon64.png](wozmon64.png)
 ![wozmon20.png](wozmon20.png)

@@ -1,0 +1,451 @@
+
+; ******** Source: vwas6502.asm
+     1                          ;; vwas6502.asm - interactive console 6502 assembler
+     2                          ;;
+     3                          ;; >>> STATUS: work in progress, ported for use with wozmon_cbm <<<
+     4                          ;;
+     5                          ;; INSTRUCTIONS
+     6                          ;;   LOAD"WOZMON SYS5120",8,1
+     7                          ;;   SYS 5120
+     8                          ;;   1500 R 1500
+     9                          ;;
+    10                          ;; Use WozMon run command to run disassembler with an address as an argument
+    11                          ;; The first 20 statements at that address will be disassembled
+    12                          ;; Repeat with other desired addresses.
+    13                          ;;
+    14                          ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    15                          ;; MIT License
+    16                          ;;
+    17                          ;; Copyright (c) 2024 David R. Van Wagner
+    18                          ;; davevw.com
+    19                          ;;
+    20                          ;; Permission is hereby granted, free of charge, to any person obtaining a copy
+    21                          ;; of this software and associated documentation files (the "Software"), to deal
+    22                          ;; in the Software without restriction, including without limitation the rights
+    23                          ;; to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    24                          ;; copies of the Software, and to permit persons to whom the Software is
+    25                          ;; furnished to do so, subject to the following conditions:
+    26                          ;;
+    27                          ;; The above copyright notice and this permission notice shall be included in all
+    28                          ;; copies or substantial portions of the Software.
+    29                          ;;
+    30                          ;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    31                          ;; IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    32                          ;; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    33                          ;; AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    34                          ;; LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    35                          ;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    36                          ;; SOFTWARE.
+    37                          ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    38                          
+    39                          ; global
+    40                          inputbuf=$0200
+    41                          
+    42                          ; zeropage
+    43                          ptr1=$fb ; and $fc
+    44                          ptr3=$fd ; and $fe
+    45                          tmp=$ff
+    46                          opidx=$22
+    47                          inidx=$23
+    48                          admode=$28
+    49                          size=$29
+    50                          counter=$2A
+    51                          
+    52                          *=$1500
+    53                          start:
+    54  1500 4c0615                 jmp disassemble
+    55                          
+    56                          charout:
+    57  1503 4cd2ff                 jmp $ffd2 ; allow patching
+    58                          
+    59                          disassemble:
+    60  1506 a900                   lda #0
+    61  1508 852a                   sta counter ; assume parse failed
+    62  150a 20f716                 jsr ignorespc
+    63  150d b007                   bcs ++
+    64  150f 200917             +   jsr inputhexword ; parse input to address word in ptr1
+    65  1512 b002                   bcs ++
+    66  1514 e62a                   inc counter ; parse succeeded!
+    67  1516 a9f5               ++  lda #<copyright
+    68  1518 a219                   ldx #>copyright
+    69  151a 205617                 jsr strout
+    70  151d a52a                   lda counter ; bool whether parsed input correctly or not
+    71  151f f021                   beq ++ ; branch if zero
+    72                          
+    73  1521 a914                   lda #20
+    74  1523 852a                   sta counter    ; setup to display 20 lines of disassembly
+    75                          
+    76  1525 a000               -   ldy #0
+    77  1527 b1fb                   lda (ptr1),y
+    78  1529 204515                 jsr find_opcode
+    79  152c 209e15                 jsr disp_current
+    80  152f a529                   lda size
+    81  1531 1002                   bpl +
+    82  1533 a901                   lda #1
+    83  1535 18                 +   clc
+    84  1536 65fb                   adc ptr1
+    85  1538 85fb                   sta ptr1
+    86  153a 9002                   bcc +
+    87  153c e6fc                   inc ptr1+1
+    88  153e c62a               +   dec counter
+    89  1540 d0e3                   bne -
+    90  1542 4c0014             ++  jmp $1400 ; return to wozmon
+    91                          
+    92                          find_opcode: ; INPUT: .A opcode byte, OUTPUT: C flag set if found, .A instruction index, .X opcode index, .Y admode, otherwise C clear, and .A/.X/.Y all $FF
+    93                          ; and properties updated in ZP globals size,inidx,opidx,admode
+    94  1545 a001                   ldy #1
+    95  1547 8429                   sty size
+    96  1549 a097                   ldy #nopcodes
+    97  154b a296                   ldx #nopcodes-1
+    98  154d dd3018             -   cmp opcodes,x
+    99  1550 f00b                   beq +
+   100  1552 ca                     dex
+   101  1553 88                     dey
+   102  1554 d0f7                   bne -
+   103  1556 18                     clc
+   104  1557 a9ff                   lda #$FF
+   105  1559 aa                     tax
+   106  155a a8                     tay
+   107  155b 9013                   bcc ++
+   108  155d bdc718             +   lda instidx, x
+   109  1560 bc5e19                 ldy modeidx, x
+   110  1563 c002                   cpy #2 // Immediate
+   111  1565 9008                   bcc +
+   112  1567 e629                   inc size
+   113  1569 c009                   cpy #9 // Absolute
+   114  156b 9002                   bcc +
+   115  156d e629                   inc size
+   116  156f 38                 +   sec
+   117  1570 8523               ++  sta inidx
+   118  1572 8622                   stx opidx
+   119  1574 8428                   sty admode
+   120  1576 60                     rts
+   121                          
+   122                          disp_opcode: ; .A opcode byte
+   123  1577 204515                 jsr find_opcode
+   124  157a 8a                     txa
+   125                              ; fall through to display instruction
+   126                          
+   127                          dispinst: ; .A instruction index 0..55
+   128  157b aa                     tax
+   129  157c e038                   cpx #ninst
+   130  157e b012                   bcs +
+   131  1580 bd6e17                 lda inst0, x
+   132  1583 200315                 jsr charout
+   133  1586 bda617                 lda inst1, x
+   134  1589 200315                 jsr charout
+   135  158c bdde17                 lda inst2, x
+   136  158f 4c0315                 jmp charout
+   137  1592 a93f               +   lda #'?'
+   138  1594 200315                 jsr charout
+   139  1597 200315                 jsr charout
+   140  159a 200315                 jsr charout
+   141  159d 60                     rts
+   142                          
+   143                          disp_current:
+   144  159e a5fb                   lda ptr1
+   145  15a0 a6fc                   ldx ptr1+1
+   146  15a2 20db16                 jsr disphexword
+   147  15a5 206717                 jsr spaceout
+   148  15a8 a000                   ldy #0
+   149  15aa a629                   ldx size
+   150  15ac b1fb               -   lda (ptr1),y
+   151  15ae 20e116                 jsr disphexbyte
+   152  15b1 206717                 jsr spaceout
+   153  15b4 c8                     iny
+   154  15b5 ca                     dex
+   155  15b6 d0f4                   bne -
+   156  15b8 c003               -   cpy #3
+   157  15ba f016                   beq +
+   158  15bc a900                   lda #0
+   159  15be 85c7                   sta 199
+   160  15c0 206717                 jsr spaceout
+   161  15c3 a900                   lda #0
+   162  15c5 85c7                   sta 199
+   163  15c7 a920                   lda #$20
+   164  15c9 200315                 jsr charout
+   165  15cc 200315                 jsr charout
+   166  15cf c8                     iny
+   167  15d0 d0e6                   bne -
+   168  15d2 a523               +   lda inidx
+   169  15d4 207b15                 jsr dispinst
+   170  15d7 a920                   lda #$20
+   171  15d9 200315                 jsr charout
+   172  15dc 20e415                 jsr disp_mode
+   173  15df a90d                   lda #13
+   174  15e1 4c0315                 jmp charout
+   175                          
+   176                          disp_mode
+   177  15e4 a528                   lda admode
+   178  15e6 c90d                   cmp #13
+   179  15e8 b00a                   bcs +
+   180  15ea 0a                     asl
+   181  15eb aa                     tax
+   182  15ec bd1718                 lda mode_jmptable+1,x
+   183  15ef 48                     pha
+   184  15f0 bd1618                 lda mode_jmptable,x
+   185  15f3 48                     pha
+   186  15f4 60                 +   rts
+   187                          
+   188                          dispModeAcc:
+   189  15f5 a941                   lda #'A'
+   190  15f7 4c0315                 jmp charout
+   191                          
+   192                          dispModeNone:
+   193  15fa 60                     rts
+   194                          
+   195                          dispModeImm:
+   196  15fb a923                   lda #'#'
+   197  15fd 200315                 jsr charout
+   198                          dispModeZP:
+   199  1600 a924                   lda #'$'
+   200  1602 200315                 jsr charout
+   201  1605 a001                   ldy #1
+   202  1607 b1fb                   lda (ptr1),y
+   203  1609 4ce116                 jmp disphexbyte
+   204                          
+   205                          dispModeIndX:
+   206  160c a928                   lda #'('
+   207  160e 200315                 jsr charout
+   208  1611 a924                   lda #'$'
+   209  1613 200315                 jsr charout
+   210  1616 a001                   ldy #1
+   211  1618 b1fb                   lda (ptr1),y
+   212  161a 20e116                 jsr disphexbyte
+   213  161d a92c                   lda #','
+   214  161f 200315                 jsr charout
+   215  1622 a958                   lda #'X'
+   216  1624 200315                 jsr charout
+   217  1627 a929                   lda #')'
+   218  1629 4c0315                 jmp charout
+   219                          
+   220                          dispModeIndY:
+   221  162c a928                   lda #'('
+   222  162e 200315                 jsr charout
+   223  1631 a924                   lda #'$'
+   224  1633 200315                 jsr charout
+   225  1636 a001                   ldy #1
+   226  1638 b1fb                   lda (ptr1),y
+   227  163a 20e116                 jsr disphexbyte
+   228  163d a929                   lda #')'
+   229  163f 200315                 jsr charout
+   230  1642 a92c                   lda #','
+   231  1644 200315                 jsr charout
+   232  1647 a959                   lda #'Y'
+   233  1649 4c0315                 jmp charout
+   234                          
+   235                          dispModeRel:
+   236  164c a924                   lda #'$'
+   237  164e 200315                 jsr charout
+   238  1651 18                     clc
+   239  1652 a5fb                   lda ptr1
+   240  1654 6902                   adc #2
+   241  1656 85fd                   sta ptr3
+   242  1658 a5fc                   lda ptr1+1
+   243  165a 6900                   adc #0
+   244  165c 85fe                   sta ptr3+1
+   245  165e a001                   ldy #1
+   246  1660 b1fb                   lda (ptr1),y
+   247  1662 1014                   bpl +
+   248                              ; I'm not sure how to successfully navigate page boundries adding signed byte to unsigned byte, so I'm subtracting unsigned bytes instead
+   249  1664 49ff                   eor #$FF ; inverse
+   250  1666 18                     clc
+   251  1667 6901                   adc #1 ; complete getting absolute value from two's complement
+   252  1669 85ff                   sta tmp
+   253  166b 38                     sec
+   254  166c a5fd                   lda ptr3
+   255  166e e5ff                   sbc tmp
+   256  1670 85fd                   sta ptr3
+   257  1672 b00d                   bcs ++
+   258  1674 c6fe                   dec ptr3+1
+   259  1676 9009                   bcc ++
+   260  1678 18                 +   clc ; simple case of adding
+   261  1679 65fd                   adc ptr3
+   262  167b 85fd                   sta ptr3
+   263  167d 9002                   bcc ++
+   264  167f e6fe                   inc ptr3+1
+   265  1681 a5fd               ++  lda ptr3
+   266  1683 a6fe                   ldx ptr3+1
+   267  1685 4cdb16                 jmp disphexword
+   268                          
+   269                          dispModeZPX:
+   270  1688 200016                 jsr dispModeZP
+   271  168b a92c                   lda #','
+   272  168d 200315                 jsr charout
+   273  1690 a958                   lda #'X'
+   274  1692 4c0315                 jmp charout
+   275                          
+   276                          dispModeZPY:
+   277  1695 200016                 jsr dispModeZP
+   278  1698 a92c                   lda #','
+   279  169a 200315                 jsr charout
+   280  169d a959                   lda #'Y'
+   281  169f 4c0315                 jmp charout
+   282                          
+   283                          dispModeAbs:
+   284  16a2 a924                   lda #'$'
+   285  16a4 200315                 jsr charout
+   286  16a7 a001                   ldy #1
+   287  16a9 b1fb                   lda (ptr1),y
+   288  16ab 48                     pha
+   289  16ac c8                     iny
+   290  16ad b1fb                   lda (ptr1),y
+   291  16af aa                     tax
+   292  16b0 68                     pla
+   293  16b1 4cdb16                 jmp disphexword
+   294                          
+   295                          dispModeAbsX:
+   296  16b4 20a216                 jsr dispModeAbs
+   297  16b7 a92c                   lda #','
+   298  16b9 200315                 jsr charout
+   299  16bc a958                   lda #'X'
+   300  16be 4c0315                 jmp charout
+   301                          
+   302                          dispModeAbsY:
+   303  16c1 20a216                 jsr dispModeAbs
+   304  16c4 a92c                   lda #','
+   305  16c6 200315                 jsr charout
+   306  16c9 a959                   lda #'Y'
+   307  16cb 4c0315                 jmp charout
+   308                          
+   309                          dispModeInd:
+   310  16ce a928                   lda #'('
+   311  16d0 200315                 jsr charout
+   312  16d3 20a216                 jsr dispModeAbs
+   313  16d6 a929                   lda #')'
+   314  16d8 4c0315                 jmp charout
+   315                          
+   316                          disphexword: ; .A low, .X high, 0000..FFFF
+   317  16db 48                     pha
+   318  16dc 8a                     txa
+   319  16dd 20e116                 jsr disphexbyte
+   320  16e0 68                     pla
+   321                              ;fall through to call again
+   322                          
+   323                          disphexbyte: ; .A 00..FF
+   324  16e1 48                     pha
+   325  16e2 4a                     lsr
+   326  16e3 4a                     lsr
+   327  16e4 4a                     lsr
+   328  16e5 4a                     lsr
+   329  16e6 20ea16                 jsr disphexnybble
+   330  16e9 68                     pla
+   331                              ;fall through to call again
+   332                          
+   333                          disphexnybble: ; .A 0..F
+   334  16ea 290f                   and #$0F
+   335  16ec 0930                   ora #$30
+   336  16ee c93a                   cmp #$3A
+   337  16f0 9002                   bcc +
+   338  16f2 6906                   adc #$06
+   339  16f4 4c0315             +   jmp charout
+   340                          
+   341                          ignorespc:
+   342                              ; input pointer first points to R when execution comes from wozmon
+   343  16f7 c8                 --  iny ; advance input pointer
+   344  16f8 f009                   beq + ; way too far
+   345  16fa b90002                 lda inputbuf,y
+   346  16fd 297f                   and #$7F
+   347  16ff d002                   bne +
+   348  1701 38                 -   sec ; error
+   349  1702 60                     rts
+   350  1703 c920               +   cmp #$20
+   351  1705 f0f0                   beq --
+   352  1707 18                     clc ; okay
+   353  1708 60                     rts
+   354                          
+   355                          inputhexword:
+   356  1709 202117                 jsr inputhexbyte
+   357  170c b012                   bcs ++
+   358  170e 85fb                   sta ptr1 ; assume one byte
+   359  1710 a900                   lda #0
+   360  1712 85fc                   sta ptr1+1 ; extend to 16 bits
+   361  1714 202117                 jsr inputhexbyte
+   362  1717 b006                   bcs +
+   363  1719 a6fb                   ldx ptr1 ; two bytes so shift the bytes
+   364  171b 86fc                   stx ptr1+1
+   365  171d 85fb                   sta ptr1
+   366  171f 18                 +   clc
+   367  1720 60                 ++  rts
+   368                          
+   369                          inputhexbyte:
+   370  1721 203817                 jsr inputhexnybble
+   371  1724 b011                   bcs +
+   372  1726 85ff                   sta tmp
+   373  1728 203817                 jsr inputhexnybble
+   374  172b b00a                   bcs +
+   375  172d 06ff                   asl tmp
+   376  172f 06ff                   asl tmp
+   377  1731 06ff                   asl tmp
+   378  1733 06ff                   asl tmp
+   379  1735 05ff                   ora tmp
+   380  1737 60                 +   rts
+   381                          
+   382                          inputhexnybble:
+   383  1738 b90002                 lda $0200,y
+   384  173b 297f                   and #$7F
+   385  173d 38                     sec
+   386  173e e930                   sbc #$30
+   387  1740 9012                   bcc ++
+   388  1742 c90a                   cmp #10
+   389  1744 900c                   bcc +
+   390  1746 e907                   sbc #7
+   391  1748 900a                   bcc ++
+   392  174a c90a                   cmp #10
+   393  174c 9006                   bcc ++
+   394  174e c910                   cmp #16
+   395  1750 b002                   bcs ++
+   396  1752 c8                 +   iny
+   397  1753 60                     rts
+   398  1754 38                 ++  sec
+   399  1755 60                     rts
+   400                          
+   401                          strout:
+   402  1756 85fd                   sta ptr3
+   403  1758 86fe                   stx ptr3+1
+   404  175a a000                   ldy #0
+   405  175c b1fd               -   lda (ptr3),y
+   406  175e f006                   beq +
+   407  1760 200315                 jsr charout
+   408  1763 c8                     iny
+   409  1764 d0f6                   bne -
+   410  1766 60                 +   rts
+   411                          
+   412                          spaceout:
+   413  1767 20ed14                 jsr $14ed ; wozmon_cbm space out, use reverse for Vic-20 due to column constraints
+   414  176a a920                   lda #$20
+   415  176c 60                     rts
+   416                          
+   417  176d 00                 end: brk
+   418                          
+   419                          ; instruction textual mnuemonic first, second, third letters (read down in source)
+   420                          ninst = 56
+   421  176e 4141414242424242...inst0 !text "AAABBBBBBBBBBCCCCCCCDDDEIIIJJLLLLNOPPPPRRRRSSSSSSSTTTTTT"
+   422  17a6 444e53434345494d...inst1 !text "DNSCCEIMNPRVVLLLLMPPEEEONNNMSDDDSORHHLLOOTTBEEETTTAASXXY"
+   423  17de 43444c4353515449...inst2 !text "CDLCSQTIELKCSCDIVPXYCXYRCXYPRAXYRPAAPAPLRISCCDIAXYXYXASA"
+   424                          
+   425                          ; 6502 addressing modes by index number and number of bytes per instruction shown at end of comment
+   426                          mode_jmptable:
+   427  1816 f415               !word dispModeAcc-1; 0 Accumulator 1
+   428  1818 f915               !word dispModeNone-1 ; 1 None 1
+   429  181a fa15               !word dispModeImm-1 ; 2 Immediate 2
+   430  181c 0b16               !word dispModeIndX-1 ; 3 IndirectX 2
+   431  181e 2b16               !word dispModeIndY-1 ; 4 IndirectY 2
+   432  1820 4b16               !word dispModeRel-1 ; 5 Relative 2
+   433  1822 ff15               !word dispModeZP-1 ; 6 ZeroPage 2
+   434  1824 8716               !word dispModeZPX-1 ; 7 ZeroPageX 2
+   435  1826 9416               !word dispModeZPY-1 ; 8 ZeroPageY 2
+   436  1828 a116               !word dispModeAbs-1 ; 9 Absolute 3
+   437  182a b316               !word dispModeAbsX-1 ; 10 AbsoluteX 3
+   438  182c c016               !word dispModeAbsY-1 ; 11 AbsoluteY 3
+   439  182e cd16               !word dispModeInd-1 ; 12 Indirect 3
+   440                          
+   441                          ; opcode table of byte values (opcodes), instructions, and addressing modes
+   442                          nopcodes = 151
+   443  1830 0001050608090a0d...opcodes !byte $00,$01,$05,$06,$08,$09,$0A,$0D,$0E,$10,$11,$15,$16,$18,$19,$1D,$1E,$20,$21,$24,$25,$26,$28,$29,$2A,$2C,$2D,$2E,$30,$31,$35,$36,$38,$39,$3D,$3E,$40,$41,$45,$46,$48,$49,$4A,$4C,$4D,$4E,$50,$51,$55,$56,$58,$59,$5D,$5E,$60,$61,$65,$66,$68,$69,$6A,$6C,$6D,$6E,$70,$71,$75,$76,$78,$79,$7D,$7E,$81,$84,$85,$86,$88,$8A,$8C,$8D,$8E,$90,$91,$94,$95,$96,$98,$99,$9A,$9D,$A0,$A1,$A2,$A4,$A5,$A6,$A8,$A9,$AA,$AC,$AD,$AE,$B0,$B1,$B4,$B5,$B6,$B8,$B9,$BA,$BC,$BD,$BE,$C0,$C1,$C4,$C5,$C6,$C8,$C9,$CA,$CC,$CD,$CE,$D0,$D1,$D5,$D6,$D8,$D9,$DD,$DE,$E0,$E1,$E4,$E5,$E6,$E8,$E9,$EA,$EC,$ED,$EE,$F0,$F1,$F5,$F6,$F8,$F9,$FD,$FE
+   444  18c7 0a22220224220222...instidx !byte $0A,$22,$22,$02,$24,$22,$02,$22,$02,$09,$22,$22,$02,$0D,$22,$22,$02,$1C,$01,$06,$01,$27,$26,$01,$27,$06,$01,$27,$07,$01,$01,$27,$2C,$01,$01,$27,$29,$17,$17,$20,$23,$17,$20,$1B,$17,$20,$0B,$17,$17,$20,$0F,$17,$17,$20,$2A,$00,$00,$28,$25,$00,$28,$1B,$00,$28,$0C,$00,$00,$28,$2E,$00,$00,$28,$2F,$31,$2F,$30,$16,$35,$31,$2F,$30,$03,$2F,$31,$2F,$30,$37,$2F,$36,$2F,$1F,$1D,$1E,$1F,$1D,$1E,$33,$1D,$32,$1F,$1D,$1E,$04,$1D,$1F,$1D,$1E,$10,$1D,$34,$1F,$1D,$1E,$13,$11,$13,$11,$14,$1A,$11,$15,$13,$11,$14,$08,$11,$11,$14,$0E,$11,$11,$14,$12,$2B,$12,$2B,$18,$19,$2B,$21,$12,$2B,$18,$05,$2B,$2B,$18,$2D,$2B,$2B,$18
+   445  195e 0103060601020009...modeidx !byte $01,$03,$06,$06,$01,$02,$00,$09,$09,$05,$04,$07,$07,$01,$0B,$0A,$0A,$09,$03,$06,$06,$06,$01,$02,$00,$09,$09,$09,$05,$04,$07,$07,$01,$0B,$0A,$0A,$01,$03,$06,$06,$01,$02,$00,$09,$09,$09,$05,$04,$07,$07,$01,$0B,$0A,$0A,$01,$03,$06,$06,$01,$02,$00,$0C,$09,$09,$05,$04,$07,$07,$01,$0B,$0A,$0A,$03,$06,$06,$06,$01,$01,$09,$09,$09,$05,$04,$07,$07,$08,$01,$0B,$01,$0A,$02,$03,$02,$06,$06,$06,$01,$02,$01,$09,$09,$09,$05,$04,$07,$07,$08,$01,$0B,$01,$0A,$0A,$0B,$02,$03,$06,$06,$06,$01,$02,$01,$09,$09,$09,$05,$04,$07,$07,$01,$0B,$0A,$0A,$02,$03,$06,$06,$06,$01,$02,$01,$09,$09,$09,$05,$04,$07,$07,$01,$0B,$0A,$0A
+   446                          
+   447  19f5 0d91565741533230...copyright !text 13,145,"VWAS2024 (C) 2024 DAVID R. VAN WAGNER", 13, "MIT LICENSE DAVEVW.COM", 157, 13, 0
+   448                          
+   449                          finish = *
